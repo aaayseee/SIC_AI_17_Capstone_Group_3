@@ -221,7 +221,7 @@ Ana bileşenler:
 configs/             Deney ayarları
 data/README.md       Veri şeması ve yerel dosya bilgisi
 docs/                Protokol, model kartı ve teknik kararlar
-reports/coursework/  Beş temel ders teslimi
+reports/coursework/  Altı temel ders teslimi
 reports/generated/   Final bilimsel sonuç özetleri
 scripts/             Pipeline, doğrulama ve kalite komutları
 src/argus/           Veri, model, GNN, vaka ve uygulama kodu
@@ -343,6 +343,7 @@ dosyasındadır.
 | Concept Note & Implementation Plan | [DOCX](reports/coursework/03_Concept_Implementation/ARGUS_AI_Concept_Note_and_Implementation_Plan.docx) |
 | Data Preparation & Feature Engineering | [DOCX](reports/coursework/04_Data_Preparation/ARGUS_AI_Veri_Hazirlama_ve_Ozellik_Muhendisligi.docx) |
 | Model Refinement & Test Submission | [PDF](reports/coursework/05_Model_Refinement_and_Test_Submission/ARGUS_Model_Refinement_ve_Test_Submission_TR.pdf) |
+| Deployment Submission | [DOCX](reports/coursework/06_Deployment_Submission/ARGUS_AI_Deployment_Submission_TR.docx) |
 
 Ayrı indeks: [`reports/coursework/README.md`](reports/coursework/README.md).
 

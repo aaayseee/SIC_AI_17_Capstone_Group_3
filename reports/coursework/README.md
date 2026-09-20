@@ -7,3 +7,4 @@
 | Concept Note & Implementation Plan | [DOCX](03_Concept_Implementation/ARGUS_AI_Concept_Note_and_Implementation_Plan.docx) |
 | Data Preparation & Feature Engineering | [DOCX](04_Data_Preparation/ARGUS_AI_Veri_Hazirlama_ve_Ozellik_Muhendisligi.docx) |
 | Model Refinement & Test Submission | [PDF](05_Model_Refinement_and_Test_Submission/ARGUS_Model_Refinement_ve_Test_Submission_TR.pdf) |
+| Deployment Submission | [DOCX](06_Deployment_Submission/ARGUS_AI_Deployment_Submission_TR.docx) |

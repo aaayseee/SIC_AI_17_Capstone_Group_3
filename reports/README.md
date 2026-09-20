@@ -1,6 +1,6 @@
 # Raporlar
 
-- [`coursework/`](coursework/README.md), beş temel capstone teslimini içerir.
+- [`coursework/`](coursework/README.md), altı temel capstone teslimini içerir.
 - [`generated/`](generated/), final değerlendirme ve model karşılaştırma özetlerini
   içerir.
 

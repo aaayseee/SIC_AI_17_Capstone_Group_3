@@ -15,7 +15,7 @@ def _button(app: AppTest, label: str):
 
 
 def _login(app: AppTest) -> AppTest:
-    _button(app, "Corporate Login").click()
+    _button(app, "Open Demo").click()
     app.run(timeout=20)
     app.text_input[0].set_value("analyst@bank.example")
     app.text_input[1].set_value("prototype-access")
@@ -108,7 +108,7 @@ def test_streamlit_all_required_screens_render_from_saved_artifacts(
 
     app = AppTest.from_file(str(app_path)).run(timeout=20)
     assert not app.exception
-    assert _button(app, "Corporate Login")
+    assert _button(app, "Open Demo")
 
     app = _login(app)
     assert not app.exception
@@ -143,7 +143,7 @@ def test_streamlit_all_required_screens_render_from_saved_artifacts(
     _button(app, "Log out").click()
     app.run(timeout=20)
     assert not app.exception
-    assert _button(app, "Corporate Login")
+    assert _button(app, "Open Demo")
 
 
 def test_streamlit_missing_artifacts_shows_actionable_error(tmp_path: Path, monkeypatch) -> None:
@@ -154,7 +154,7 @@ def test_streamlit_missing_artifacts_shows_actionable_error(tmp_path: Path, monk
 
     app = AppTest.from_file(str(app_path)).run(timeout=20)
     assert not app.exception
-    assert _button(app, "Corporate Login")
+    assert _button(app, "Open Demo")
 
     app = _login(app)
 
@@ -172,14 +172,15 @@ def test_streamlit_missing_artifacts_shows_actionable_error(tmp_path: Path, monk
     assert "investigation_queue.csv" not in visible_text
 
 
-def test_clean_clone_uses_tracked_synthetic_demo(monkeypatch) -> None:
-    monkeypatch.delenv("ARGUS_ARTIFACT_DIR", raising=False)
+def test_tracked_synthetic_demo_can_be_selected_explicitly(monkeypatch) -> None:
+    demo_root = Path(__file__).resolve().parents[1] / "demo" / "artifacts"
+    monkeypatch.setenv("ARGUS_ARTIFACT_DIR", str(demo_root))
     monkeypatch.delenv("ARGUS_SPRINT4_ARTIFACT_DIR", raising=False)
     monkeypatch.delenv("ARGUS_DEMO_EMAIL", raising=False)
     monkeypatch.delenv("ARGUS_DEMO_PASSWORD", raising=False)
 
     root = configured_artifact_root()
-    assert root.parts[-2:] == ("demo", "artifacts")
+    assert root == demo_root
     app_path = Path(__file__).resolve().parents[1] / "app.py"
     app = _login(AppTest.from_file(str(app_path)).run(timeout=20))
 
@@ -204,7 +205,8 @@ def test_clean_clone_uses_tracked_synthetic_demo(monkeypatch) -> None:
 
 
 def test_portal_guides_review_workflow_and_explains_metrics(monkeypatch) -> None:
-    monkeypatch.delenv("ARGUS_ARTIFACT_DIR", raising=False)
+    demo_root = Path(__file__).resolve().parents[1] / "demo" / "artifacts"
+    monkeypatch.setenv("ARGUS_ARTIFACT_DIR", str(demo_root))
     monkeypatch.delenv("ARGUS_SPRINT4_ARTIFACT_DIR", raising=False)
     monkeypatch.delenv("ARGUS_DEMO_EMAIL", raising=False)
     monkeypatch.delenv("ARGUS_DEMO_PASSWORD", raising=False)

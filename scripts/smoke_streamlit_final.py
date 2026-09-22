@@ -45,25 +45,29 @@ def _validation_root(artifact_root: Path) -> Path | None:
     return (artifact_root / configured).resolve()
 
 
-def _exercise_demo_request(app: AppTest) -> AppTest:
-    _button(app, "Request a Demo").click()
+def _exercise_pilot_request(app: AppTest) -> AppTest:
+    _button(app, "Request a Pilot").click()
     app.run(timeout=30)
     values = {
-        "First name": "ARGUS",
-        "Last name": "Smoke",
-        "Work email": "smoke@institution.example",
-        "Company / Bank": "Example Institution",
+        "Name": "ARGUS Smoke",
+        "Company": "Example Institution",
+        "Work Email": "smoke@institution.example",
+        "Role": "AML Manager",
     }
     for label, value in values.items():
         _element(app.text_input, label).set_value(value)
-    _element(app.selectbox, "Job role").set_value("Financial Crime / AML")
-    _element(app.text_area, "Message or use case").set_value("Review the investigation workflow.")
-    consent_label = "I agree that these details may be used to respond to this demo request."
+    _element(app.selectbox, "Organization Type").set_value("Bank")
+    _element(app.selectbox, "Main Challenge").set_value("Alert Prioritization")
+    _element(app.text_area, "Optional Message").set_value("Review the investigation workflow.")
+    consent_label = "I understand this demo form validates inputs but does not send or store them."
     _element(app.checkbox, consent_label).check()
-    _button(app, "Request a Demo").click()
+    _button(app, "Request ARGUS Pilot").click()
     app.run(timeout=30)
-    if app.exception or not any("Thank you, ARGUS" in item.value for item in app.success):
-        raise RuntimeError("Demo request flow did not complete")
+    if app.exception or not any("ARGUS Smoke" in item.value for item in app.success):
+        raise RuntimeError("Pilot request flow did not complete")
+    confirmation = " ".join(str(item.value) for item in app.markdown).casefold()
+    if "not stored" not in confirmation or "or sent" not in confirmation:
+        raise RuntimeError("Pilot request did not disclose its session-only behavior")
     _button(app, "Return to Site").click()
     return app.run(timeout=30)
 
@@ -73,7 +77,7 @@ def _login(app: AppTest) -> AppTest:
     password = secrets.token_urlsafe(16)
     os.environ["ARGUS_DEMO_EMAIL"] = email
     os.environ["ARGUS_DEMO_PASSWORD"] = password
-    _button(app, "Corporate Login").click()
+    _button(app, "Open Demo").click()
     app.run(timeout=30)
     app.text_input[0].set_value(email)
     app.text_input[1].set_value(password)
@@ -98,10 +102,11 @@ def _open_case_from_worklist(app: AppTest) -> AppTest:
 
 
 def _select_case(app: AppTest, index: int) -> AppTest:
-    selector = _element(app.selectbox, "Case")
+    selector = _element(app.selectbox, "Case to review")
     if len(selector.options) <= index:
         raise RuntimeError("Not enough cases to exercise workflow actions")
-    selector.set_value(selector.options[index])
+    case_id = str(selector.options[index]).split(maxsplit=1)[0]
+    selector.set_value(case_id)
     return app.run(timeout=30)
 
 
@@ -116,7 +121,7 @@ def _exercise_case_workflow(app: AppTest) -> AppTest:
     if app.exception or not app.title or app.title[0].value != "Case Investigator":
         raise RuntimeError("Case Investigator did not open")
 
-    _button(app, "Start Review").click()
+    _button(app, "Start review").click()
     app.run(timeout=30)
     _element(app.text_area, "Add a note").set_value("Smoke-test review note.")
     _button(app, "Save note").click()
@@ -161,11 +166,11 @@ def main() -> int:
         protected_roots.append(validation_root)
     before_snapshot = {str(root): _snapshot_tree(root) for root in protected_roots}
     app = AppTest.from_file(str(project_root / "app.py")).run(timeout=30)
-    if app.exception or not any(button.label == "Corporate Login" for button in app.button):
+    if app.exception or not any(button.label == "Open Demo" for button in app.button):
         print("Final Streamlit artifact smoke status: FAIL (public site)")
         return 1
     try:
-        app = _exercise_demo_request(app)
+        app = _exercise_pilot_request(app)
     except RuntimeError as error:
         print(f"Final Streamlit artifact smoke status: FAIL ({error})")
         return 1
@@ -193,7 +198,7 @@ def main() -> int:
 
     _button(app, "Log out").click()
     app.run(timeout=30)
-    if app.exception or not any(button.label == "Corporate Login" for button in app.button):
+    if app.exception or not any(button.label == "Open Demo" for button in app.button):
         print("Final Streamlit artifact smoke status: FAIL (logout)")
         return 1
     after_snapshot = {str(root): _snapshot_tree(root) for root in protected_roots}
@@ -203,7 +208,7 @@ def main() -> int:
 
     print("Final Streamlit artifact smoke status: PASS")
     print(f"Artifact root: {artifact_root}")
-    print("Rendered flow: Public site, Demo request, Login, Overview, Investigations, ")
+    print("Rendered flow: Public site, Pilot request, Login, Overview, Investigations, ")
     print("Case Investigator actions, Model Evidence, Logout")
     print("Artifact read-only check: PASS")
     return 0

@@ -10,14 +10,23 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
+from argus.app.marketing import (
+    render_before_after,
+    render_capacity_calculator,
+    render_case_challenge,
+    render_pilot_program,
+    render_problem_flow,
+    render_resource_cards,
+)
 from argus.app.styles import COLORS, anchor, render_main_content_anchor, section_heading
 
 Navigate = Callable[[str], None]
 
 _GITHUB_ROOT = "https://github.com/edasaruhan/SIC_AI_17_Capstone_Group_3"
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-_ROLE_PLACEHOLDER = "Select your role"
-_HOW_IT_WORKS_LINK = '<a class="argus-secondary-cta" href="#how-it-works">See How ARGUS Works</a>'
+_ORGANIZATION_PLACEHOLDER = "Select organization type"
+_CHALLENGE_PLACEHOLDER = "Select main challenge"
+_EXPLORE_ARGUS_LINK = '<a class="argus-primary-cta" href="#case-challenge">Explore ARGUS</a>'
 
 
 def validate_demo_request(values: Mapping[str, Any]) -> dict[str, str]:
@@ -25,12 +34,12 @@ def validate_demo_request(values: Mapping[str, Any]) -> dict[str, str]:
 
     errors: dict[str, str] = {}
     required = {
-        "first_name": "Enter your first name.",
-        "last_name": "Enter your last name.",
+        "name": "Enter your name.",
         "work_email": "Enter your work email.",
-        "company": "Enter your company or bank.",
-        "role": "Select your job role.",
-        "message": "Briefly describe your use case.",
+        "company": "Enter your company.",
+        "role": "Enter your role.",
+        "organization_type": "Select your organization type.",
+        "main_challenge": "Select your main challenge.",
     }
     for field, message in required.items():
         if not str(values.get(field, "")).strip():
@@ -40,18 +49,24 @@ def validate_demo_request(values: Mapping[str, Any]) -> dict[str, str]:
     if email and not _EMAIL_PATTERN.fullmatch(email):
         errors["work_email"] = "Enter a valid email address, such as name@company.com."
 
-    role = str(values.get("role", "")).strip()
-    if role == _ROLE_PLACEHOLDER:
-        errors["role"] = "Select your job role."
+    organization_type = str(values.get("organization_type", "")).strip()
+    if organization_type == _ORGANIZATION_PLACEHOLDER:
+        errors["organization_type"] = "Select your organization type."
+
+    main_challenge = str(values.get("main_challenge", "")).strip()
+    if main_challenge == _CHALLENGE_PLACEHOLDER:
+        errors["main_challenge"] = "Select your main challenge."
 
     if not values.get("consent"):
-        errors["consent"] = "Confirm that ARGUS may use these details for this demo request."
+        errors["consent"] = (
+            "Confirm that you understand this demo form does not send or store details."
+        )
     return errors
 
 
 def _public_navigation(navigate: Navigate) -> None:
     with st.container(key="argus_public_nav"):
-        brand, links, demo, login = st.columns([1.0, 4.5, 1.2, 1.2], vertical_alignment="center")
+        brand, links, pilot, login = st.columns([0.9, 4.7, 1.25, 1.0], vertical_alignment="center")
         with brand:
             st.markdown('<div class="argus-wordmark">ARGUS</div>', unsafe_allow_html=True)
         with links:
@@ -61,30 +76,30 @@ def _public_navigation(navigate: Navigate) -> None:
                   <div class="argus-desktop-nav">
                     <a href="#product">Product</a>
                     <a href="#how-it-works">How It Works</a>
-                    <a href="#analyst-experience">Analyst Experience</a>
-                    <a href="#responsible-ai">Security &amp; Responsible AI</a>
+                    <a href="#case-challenge">Case Challenge</a>
+                    <a href="#calculator">Calculator</a>
                     <a href="#resources">Resources</a>
-                    <a href="#contact">Contact</a>
+                    <a href="#pilot-program">Pilot Program</a>
                   </div>
                   <details class="argus-mobile-nav">
                     <summary>Explore</summary>
                     <div class="argus-mobile-nav-panel">
                       <a href="#product">Product</a>
                       <a href="#how-it-works">How It Works</a>
-                      <a href="#analyst-experience">Analyst Experience</a>
-                      <a href="#responsible-ai">Security &amp; Responsible AI</a>
+                      <a href="#case-challenge">Case Challenge</a>
+                      <a href="#calculator">Calculator</a>
                       <a href="#resources">Resources</a>
-                      <a href="#contact">Contact</a>
+                      <a href="#pilot-program">Pilot Program</a>
                     </div>
                   </details>
                 </nav>
                 """,
                 unsafe_allow_html=True,
             )
-        with demo:
+        with pilot:
             st.button(
-                "Request a Demo",
-                key="public_nav_demo",
+                "Request a Pilot",
+                key="public_nav_pilot",
                 type="primary",
                 width="stretch",
                 on_click=navigate,
@@ -92,7 +107,7 @@ def _public_navigation(navigate: Navigate) -> None:
             )
         with login:
             st.button(
-                "Corporate Login",
+                "Open Demo",
                 key="public_nav_login",
                 width="stretch",
                 on_click=navigate,
@@ -133,11 +148,12 @@ def _render_hero(navigate: Navigate) -> None:
         st.markdown(
             """
             <section class="argus-hero">
-              <div class="argus-eyebrow">Financial crime investigation intelligence</div>
-              <h1>See the network behind the transaction.</h1>
+              <div class="argus-eyebrow">Graph-based financial crime &amp;
+              account network intelligence</div>
+              <h1>See beyond the transaction.</h1>
               <p class="argus-hero-copy">
-                ARGUS helps financial-crime teams prioritize investigations using transaction
-                history and account-network context—while keeping every decision in human hands.
+                ARGUS helps financial crime teams prioritize suspicious cases by combining
+                transaction history, behavioral signals, and account-network intelligence.
               </p>
               <div class="argus-trust-row" aria-label="ARGUS principles">
                 <span class="argus-pill">Evidence-led review</span>
@@ -150,16 +166,15 @@ def _render_hero(navigate: Navigate) -> None:
         )
         primary, secondary = st.columns(2)
         with primary:
+            st.markdown(_EXPLORE_ARGUS_LINK, unsafe_allow_html=True)
+        with secondary:
             st.button(
-                "Request a Demo",
-                key="hero_demo",
-                type="primary",
+                "Request a Pilot",
+                key="hero_pilot",
                 width="stretch",
                 on_click=navigate,
                 args=("demo",),
             )
-        with secondary:
-            st.markdown(_HOW_IT_WORKS_LINK, unsafe_allow_html=True)
     with visual:
         st.markdown(
             """
@@ -328,7 +343,7 @@ def _render_product_preview() -> None:
     anchor("product")
     section_heading(
         "Product",
-        "Move from an isolated transfer to an investigation-ready view.",
+        "Move from an isolated transfer to a connected investigation view.",
         "ARGUS brings transaction history, directed account relationships, and review evidence "
         "into one focused analyst workflow.",
     )
@@ -622,15 +637,14 @@ def _scientific_evidence(artifacts: Any | None) -> list[tuple[str, str]]:
 
 
 def _render_scientific_credibility(artifacts: Any | None, navigate: Navigate) -> None:
-    anchor("resources")
     evidence = _scientific_evidence(artifacts)
     if evidence:
         values = dict(evidence)
         st.markdown(
             f"""
             <section class="argus-credibility-strip">
-              <div class="argus-credibility-label"><span>Project evaluation</span>
-              <strong>IBM AML HI-Small</strong></div>
+              <div class="argus-credibility-label"><span>Synthetic one-shot holdout</span>
+              <strong>IBM AML HI-Small project evaluation</strong></div>
               <div><strong>5.08M</strong><span>transaction project dataset</span></div>
               <div><strong>Graph-enhanced LightGBM</strong><span>primary model</span></div>
               <div><strong>{html.escape(values.get("Final PR-AUC", "—"))}</strong>
@@ -671,17 +685,17 @@ def _render_contact(navigate: Navigate) -> None:
         with copy:
             st.markdown(
                 """
-                <div class="argus-eyebrow light">Request a demonstration</div>
-                <h2>Bring network context into your investigation workflow.</h2>
-                <p>Tell us about your investigation workflow and explore how ARGUS could fit
-                your review process.</p>
+                <div class="argus-eyebrow light">Controlled pilot evaluation</div>
+                <h2>Explore ARGUS with your investigation workflow.</h2>
+                <p>Share your review challenge and start a conversation about a governed,
+                analyst-led evaluation.</p>
                 """,
                 unsafe_allow_html=True,
             )
         with action:
             st.button(
-                "Request a Demo",
-                key="contact_demo",
+                "Request ARGUS Pilot",
+                key="contact_pilot",
                 type="primary",
                 width="stretch",
                 on_click=navigate,
@@ -705,7 +719,7 @@ def _render_footer(navigate: Navigate) -> None:
         resources.button(
             "Resources", key="footer_resources", on_click=navigate, args=("resources",)
         )
-        contact.button("Contact", key="footer_contact", on_click=navigate, args=("demo",))
+        contact.button("Pilot", key="footer_contact", on_click=navigate, args=("demo",))
         privacy.button("Privacy", key="footer_privacy", on_click=navigate, args=("privacy",))
         terms.button("Terms", key="footer_terms", on_click=navigate, args=("terms",))
         login.button("Login", key="footer_login", on_click=navigate, args=("login",))
@@ -717,23 +731,30 @@ def render_public_home(navigate: Navigate, artifacts: Any | None = None) -> None
 
     _public_navigation(navigate)
     _render_hero(navigate)
+    render_problem_flow()
+    render_before_after()
     _render_product_preview()
     _render_how_it_works()
+    render_case_challenge(navigate)
+    render_capacity_calculator(navigate)
     _render_analyst_experience()
     _render_responsible_ai()
+    render_resource_cards()
     _render_scientific_credibility(artifacts, navigate)
+    render_pilot_program(navigate)
     _render_contact(navigate)
     _render_footer(navigate)
 
 
 def _reset_demo_request() -> None:
     for key in (
-        "demo_first_name",
-        "demo_last_name",
+        "demo_name",
         "demo_work_email",
         "demo_company",
         "demo_role",
-        "demo_message",
+        "demo_organization_type",
+        "demo_main_challenge",
+        "demo_optional_message",
         "demo_consent",
         "argus_demo_request_submitted",
         "argus_demo_request_name",
@@ -752,27 +773,29 @@ def _field_error(errors: Mapping[str, str], field: str, target: Any = st) -> Non
 
 
 def render_demo_request(navigate: Navigate) -> None:
-    """Render a validated, session-local request-a-demo flow."""
+    """Render a validated, session-local request-a-pilot flow."""
 
     _page_navigation(navigate)
     st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
     section_heading(
-        "Request a demo",
-        "Start a conversation about your investigation workflow.",
-        "Tell us where network context and evidence-led review could support your team.",
+        "Request ARGUS Pilot",
+        "Start a conversation about a controlled evaluation.",
+        "Tell us where prioritization, network context, and evidence-led review could support "
+        "your investigation team.",
     )
 
     if st.session_state.get("argus_demo_request_submitted"):
         name = st.session_state.get("argus_demo_request_name", "there")
-        st.success(f"Thank you, {name}. Your request is ready for this demo session.")
+        st.success(f"Thank you, {name}. Your pilot request is complete for this demo session.")
         st.markdown(
             '<div class="argus-prototype-note"><strong>Demo environment</strong> · No external '
-            "CRM submission is connected. No message was sent.</div>",
+            "CRM, email delivery, or persistent storage is connected. Details were not stored "
+            "or sent.</div>",
             unsafe_allow_html=True,
         )
         first, second, remainder = st.columns([1.2, 1.2, 3.6])
         first.button(
-            "Submit Another",
+            "Submit Another Request",
             key="demo_again",
             on_click=_reset_demo_request,
             width="stretch",
@@ -793,53 +816,67 @@ def render_demo_request(navigate: Navigate) -> None:
     if errors:
         st.error("Please correct the highlighted request details.")
     with st.form("argus_demo_request_form", clear_on_submit=False):
-        first, last = st.columns(2)
-        first_name = first.text_input("First name", key="demo_first_name")
-        _field_error(errors, "first_name", first)
-        last_name = last.text_input("Last name", key="demo_last_name")
-        _field_error(errors, "last_name", last)
+        name = st.text_input("Name", key="demo_name")
+        _field_error(errors, "name")
+        company = st.text_input("Company", key="demo_company")
+        _field_error(errors, "company")
         work_email = st.text_input(
-            "Work email", key="demo_work_email", placeholder="name@company.com"
+            "Work Email", key="demo_work_email", placeholder="name@company.com"
         )
         _field_error(errors, "work_email")
-        company = st.text_input("Company / Bank", key="demo_company")
-        _field_error(errors, "company")
-        role = st.selectbox(
-            "Job role",
-            (
-                _ROLE_PLACEHOLDER,
-                "Financial Crime / AML",
-                "Fraud Operations",
-                "Compliance",
-                "Risk Management",
-                "Data / Technology",
-                "Executive Leadership",
-                "Other",
-            ),
-            key="demo_role",
+        role = st.text_input(
+            "Role", key="demo_role", placeholder="AML Manager, MLRO, Data & AI Lead…"
         )
         _field_error(errors, "role")
-        message = st.text_area(
-            "Message or use case",
-            key="demo_message",
-            placeholder="Tell us what your investigation team needs to understand or prioritize.",
+        organization_type = st.selectbox(
+            "Organization Type",
+            (
+                _ORGANIZATION_PLACEHOLDER,
+                "Bank",
+                "Digital Bank",
+                "Payment Institution",
+                "Electronic Money Institution",
+                "Fintech",
+                "Other",
+            ),
+            key="demo_organization_type",
         )
-        _field_error(errors, "message")
+        _field_error(errors, "organization_type")
+        main_challenge = st.selectbox(
+            "Main Challenge",
+            (
+                _CHALLENGE_PLACEHOLDER,
+                "Alert Prioritization",
+                "AML Investigation",
+                "Account Network Analysis",
+                "False Positive Management",
+                "Model Explainability",
+                "Other",
+            ),
+            key="demo_main_challenge",
+        )
+        _field_error(errors, "main_challenge")
+        optional_message = st.text_area(
+            "Optional Message",
+            key="demo_optional_message",
+            placeholder="Add any context that would help frame a pilot conversation.",
+        )
         consent = st.checkbox(
-            "I agree that these details may be used to respond to this demo request.",
+            "I understand this demo form validates inputs but does not send or store them.",
             key="demo_consent",
         )
         _field_error(errors, "consent")
-        submitted = st.form_submit_button("Request a Demo", type="primary", width="stretch")
+        submitted = st.form_submit_button("Request ARGUS Pilot", type="primary", width="stretch")
 
     if submitted:
         values = {
-            "first_name": first_name,
-            "last_name": last_name,
+            "name": name,
             "work_email": work_email,
             "company": company,
             "role": role,
-            "message": message,
+            "organization_type": organization_type,
+            "main_challenge": main_challenge,
+            "optional_message": optional_message,
             "consent": consent,
         }
         errors = validate_demo_request(values)
@@ -849,9 +886,12 @@ def render_demo_request(navigate: Navigate) -> None:
         else:
             st.session_state.pop("argus_demo_request_errors", None)
             st.session_state["argus_demo_request_submitted"] = True
-            st.session_state["argus_demo_request_name"] = first_name.strip()
+            st.session_state["argus_demo_request_name"] = name.strip()
             st.rerun()
-    st.caption("Required fields must be complete. No form data is written to project artifacts.")
+    st.caption(
+        "Required fields must be complete. Form values remain in this session only and are not "
+        "written to project artifacts."
+    )
     st.button(
         "Return to Public Site",
         key="demo_home",

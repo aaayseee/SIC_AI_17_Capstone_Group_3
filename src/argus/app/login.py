@@ -67,8 +67,16 @@ def render_login(navigate: Navigate) -> None:
             result = sign_in(st.session_state, email, password)
             if result.accepted:
                 st.session_state["argus_login_notice"] = result.message
-                st.session_state["argus_portal_page"] = "Overview"
-                st.session_state["argus_nav_override"] = "Overview"
+                target_page = str(st.session_state.pop("argus_post_login_page", "Overview"))
+                if target_page not in {
+                    "Overview",
+                    "Investigations",
+                    "Case Investigator",
+                    "Model Evidence",
+                }:
+                    target_page = "Overview"
+                st.session_state["argus_portal_page"] = target_page
+                st.session_state["argus_nav_override"] = target_page
                 navigate("portal")
                 st.rerun()
             else:

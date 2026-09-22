@@ -290,6 +290,24 @@ def _click_text(client: _DevToolsClient, session_id: str, selector: str, label: 
     )
 
 
+def _select_sidebar_page(client: _DevToolsClient, session_id: str, label: str) -> None:
+    selected = _evaluate(
+        client,
+        session_id,
+        "(() => {"
+        "const labels=Array.from(document.querySelectorAll('[data-testid=stSidebar] label'));"
+        "const target=labels.find(node=>"
+        f"(node.innerText||node.textContent||'').trim()==={json.dumps(label)});"
+        "if(!target){return false;}"
+        "const input=target.querySelector('input');"
+        "(input||target).click();"
+        "return true;"
+        "})()",
+    )
+    if selected is not True:
+        raise RuntimeError(f"Could not select sidebar page {label!r}")
+
+
 def _wait_for_selector_text_change(
     client: _DevToolsClient,
     session_id: str,
@@ -485,7 +503,7 @@ def _capture_element(
     *,
     padding: int = 24,
 ) -> None:
-    """Capture a section itself so nearby page scroll limits cannot duplicate screenshots."""
+    """Capture a complete section and fail if it extends beyond the viewport width."""
 
     geometry = _evaluate(
         client,
@@ -493,7 +511,7 @@ def _capture_element(
         "(() => {"
         f"const node=document.querySelector({json.dumps(selector)});"
         "if(!node){return null;}"
-        "node.scrollIntoView({block:'center',inline:'nearest'});"
+        "node.scrollIntoView({block:'start',inline:'nearest'});"
         "const box=node.getBoundingClientRect();"
         "return {left:box.left,top:box.top,width:box.width,height:box.height,"
         "viewportWidth:window.innerWidth,viewportHeight:window.innerHeight};})()",
@@ -501,39 +519,96 @@ def _capture_element(
     if not isinstance(geometry, dict):
         raise RuntimeError(f"Could not locate visual QA section: {selector}")
     time.sleep(0.6)
-    geometry = _evaluate(
-        client,
-        session_id,
-        "(() => {"
-        f"const node=document.querySelector({json.dumps(selector)});"
-        "if(!node){return null;}const box=node.getBoundingClientRect();"
-        "return {left:box.left,top:box.top,width:box.width,height:box.height,"
-        "viewportWidth:window.innerWidth,viewportHeight:window.innerHeight};})()",
-    )
-    if not isinstance(geometry, dict):
-        raise RuntimeError(f"Visual QA section disappeared: {selector}")
-    viewport_width = float(geometry["viewportWidth"])
-    viewport_height = float(geometry["viewportHeight"])
-    x = max(0.0, float(geometry["left"]) - padding)
-    y = max(0.0, float(geometry["top"]) - padding)
-    width = min(viewport_width - x, float(geometry["width"]) + (2 * padding))
-    height = min(viewport_height - y, float(geometry["height"]) + (2 * padding))
-    if width <= 0 or height <= 0:
-        raise RuntimeError(f"Visual QA section is outside the viewport: {selector}; {geometry}")
-    captured = client.command(
-        "Page.captureScreenshot",
-        {
-            "format": "png",
-            "fromSurface": True,
-            "captureBeyondViewport": False,
-            "clip": {"x": x, "y": y, "width": width, "height": height, "scale": 1},
-        },
-        session_id=session_id,
-    )
-    image_data = captured.get("data")
-    if not isinstance(image_data, str) or not image_data:
-        raise RuntimeError(f"DevTools did not return a screenshot for {selector}")
-    destination.write_bytes(base64.b64decode(image_data, validate=True))
+    original_width = int(round(float(geometry["viewportWidth"])))
+    original_height = int(round(float(geometry["viewportHeight"])))
+    requested_height = int(float(geometry["height"]) + (2 * padding) + 1)
+    capture_height = max(original_height, requested_height)
+    if capture_height > 9000:
+        raise RuntimeError(
+            f"Visual QA section is too tall to capture safely: {selector}; {geometry}"
+        )
+    resized = capture_height != original_height
+    try:
+        if resized:
+            client.command(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": original_width,
+                    "height": capture_height,
+                    "deviceScaleFactor": 1,
+                    "mobile": original_width <= 640,
+                },
+                session_id=session_id,
+            )
+            time.sleep(0.4)
+        geometry = _evaluate(
+            client,
+            session_id,
+            "(() => {"
+            f"const node=document.querySelector({json.dumps(selector)});"
+            "if(!node){return null;}"
+            "node.scrollIntoView({block:'start',inline:'nearest'});"
+            "const box=node.getBoundingClientRect();"
+            "return {left:box.left,top:box.top,right:box.right,bottom:box.bottom,"
+            "width:box.width,height:box.height,viewportWidth:window.innerWidth,"
+            "viewportHeight:window.innerHeight};})()",
+        )
+        if not isinstance(geometry, dict):
+            raise RuntimeError(f"Visual QA section disappeared: {selector}")
+        time.sleep(0.4)
+        viewport_width = float(geometry["viewportWidth"])
+        viewport_height = float(geometry["viewportHeight"])
+        left = float(geometry["left"])
+        right = float(geometry["right"])
+        top = float(geometry["top"])
+        bottom = float(geometry["bottom"])
+        if left < -1 or right > viewport_width + 1:
+            raise RuntimeError(
+                f"Visual QA section exceeds the horizontal viewport: {selector}; {geometry}"
+            )
+        if top < -1 or bottom > viewport_height + 1:
+            raise RuntimeError(
+                f"Visual QA section remains vertically clipped: {selector}; {geometry}"
+            )
+        x = max(0.0, left - padding)
+        y = max(0.0, top - padding)
+        width = min(viewport_width - x, right + padding - x)
+        height = min(viewport_height - y, bottom + padding - y)
+        if width <= 0 or height <= 0:
+            raise RuntimeError(f"Visual QA section is outside the viewport: {selector}; {geometry}")
+        captured = client.command(
+            "Page.captureScreenshot",
+            {
+                "format": "png",
+                "fromSurface": True,
+                "captureBeyondViewport": False,
+                "clip": {
+                    "x": x,
+                    "y": y,
+                    "width": width,
+                    "height": height,
+                    "scale": 1,
+                },
+            },
+            session_id=session_id,
+        )
+        image_data = captured.get("data")
+        if not isinstance(image_data, str) or not image_data:
+            raise RuntimeError(f"DevTools did not return a screenshot for {selector}")
+        destination.write_bytes(base64.b64decode(image_data, validate=True))
+    finally:
+        if resized:
+            client.command(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": original_width,
+                    "height": original_height,
+                    "deviceScaleFactor": 1,
+                    "mobile": original_width <= 640,
+                },
+                session_id=session_id,
+            )
+            time.sleep(0.3)
 
 
 def _capture_viewport_at_text(
@@ -589,8 +664,8 @@ def _capture_portal_pages(
     _capture_rendered_page(client, session_id, "Overview", overview_destination)
     created.append(overview_destination)
 
-    _click_text(client, session_id, "label", "Investigations")
-    _wait_for_text(client, session_id, "Search, filter and open investigation cases")
+    _select_sidebar_page(client, session_id, "Investigations")
+    _wait_for_text(client, session_id, "Find the right case quickly")
     _assert_portal_layout(client, session_id)
     queue_destination = (output_dir / "investigation_queue.png").resolve()
     _capture_rendered_page(client, session_id, "Investigations", queue_destination)
@@ -621,8 +696,11 @@ def _capture_portal_pages(
     opened_panel = _wait_for_selector_text_change(
         client, session_id, panel_selector, selected_panel
     )
-    selected_case_id = opened_panel.splitlines()[0].strip()
-    if not selected_case_id.startswith("ARGUS-"):
+    selected_case_id = next(
+        (line.strip() for line in opened_panel.splitlines() if line.strip().startswith("ARGUS-")),
+        "",
+    )
+    if not selected_case_id:
         raise RuntimeError(f"Unexpected selected case panel: {opened_panel!r}")
     _click_text(client, session_id, "button", "Open case")
     _wait_for_text(client, session_id, selected_case_id)
@@ -633,7 +711,7 @@ def _capture_portal_pages(
     created.append(case_destination)
 
     _click_text(client, session_id, "button", "Escalate")
-    confirmation = "Escalate this case for further review?"
+    confirmation = "Escalate this case? Its status will change to Escalated for further review."
     _wait_for_text(client, session_id, confirmation)
     confirmation_destination = (output_dir / "case_action_confirmation.png").resolve()
     _capture_viewport_at_text(
@@ -651,7 +729,7 @@ def _capture_portal_pages(
     case_sections = {
         "case_network": "Account network",
         "case_observed_evidence": "What the records show",
-        "case_model_evidence": "How models inform this review",
+        "case_model_evidence": "Why this case was prioritized",
         "case_notes_activity": "Analyst notes",
     }
     for slug, heading in case_sections.items():
@@ -660,7 +738,7 @@ def _capture_portal_pages(
         _assert_product_chrome(client, session_id)
         created.append(destination)
 
-    _click_text(client, session_id, "label", "Model Evidence")
+    _select_sidebar_page(client, session_id, "Model Evidence")
     _wait_for_text(client, session_id, "Frozen primary model")
     _assert_portal_layout(client, session_id)
     model_destination = (output_dir / "model_comparison.png").resolve()
@@ -775,14 +853,14 @@ def main() -> int:
                     {"url": f"{base_url}/?view=home&preview=network"},
                     session_id=session_id,
                 )
-                _wait_for_text(client, session_id, "See the network behind the transaction.")
+                _wait_for_text(client, session_id, "See beyond the transaction.")
                 _wait_for_text(client, session_id, "6 accounts")
                 _assert_product_chrome(client, session_id)
                 public_destination = (output_dir / "public_home.png").resolve()
                 _capture_rendered_page(
                     client,
                     session_id,
-                    "See the network behind the transaction.",
+                    "See beyond the transaction.",
                     public_destination,
                 )
                 created.append(public_destination)
@@ -811,13 +889,21 @@ def main() -> int:
                 )
                 created.append(preview_destination)
                 public_sections = {
-                    "problem_value": ".argus-value-section",
+                    "problem_flow": (
+                        "div[data-testid='stMarkdownContainer']:has(.argus-alert-flow)"
+                    ),
+                    "before_after": ".argus-before-after",
                     "how_it_works": ".argus-process",
-                    "operational_value": ".argus-outcome-band",
+                    "case_challenge_initial": ".st-key-case_challenge_shell",
+                    "capacity_calculator": (
+                        "div[data-testid='stHorizontalBlock']:has(.st-key-capacity_inputs)"
+                    ),
                     "analyst_experience": ".argus-analyst-journey",
                     "responsible_ai": ".argus-trust-grid",
+                    "resources": ".argus-marketing-resources",
                     "credibility": ".argus-credibility-strip",
-                    "request_demo": ".st-key-contact_callout",
+                    "pilot_program": ".argus-pilot-steps",
+                    "contact": ".st-key-contact_callout",
                     "footer": ".st-key-public_footer",
                 }
                 for slug, selector in public_sections.items():
@@ -825,6 +911,28 @@ def main() -> int:
                     _capture_element(client, session_id, selector, destination)
                     _assert_product_chrome(client, session_id)
                     created.append(destination)
+                _click_text(client, session_id, "button", "SHOW MORE CONTEXT")
+                _wait_for_text(client, session_id, "ADDITIONAL TRANSACTION HISTORY")
+                _assert_product_chrome(client, session_id)
+                history_destination = (output_dir / "public_case_challenge_history.png").resolve()
+                _capture_element(
+                    client,
+                    session_id,
+                    ".st-key-case_challenge_shell",
+                    history_destination,
+                )
+                created.append(history_destination)
+                _click_text(client, session_id, "button", "Reveal account network")
+                _wait_for_text(client, session_id, "ACCOUNT NETWORK CONTEXT")
+                _assert_product_chrome(client, session_id)
+                network_destination = (output_dir / "public_case_challenge_network.png").resolve()
+                _capture_element(
+                    client,
+                    session_id,
+                    ".st-key-case_challenge_shell",
+                    network_destination,
+                )
+                created.append(network_destination)
                 client.command(
                     "Page.navigate", {"url": f"{base_url}/?view=demo"}, session_id=session_id
                 )

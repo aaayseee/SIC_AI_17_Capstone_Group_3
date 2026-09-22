@@ -3,8 +3,10 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
+from argus.app.marketing import calculate_investigation_capacity
 from argus.app.public_site import _preview_figure, validate_demo_request
 
 
@@ -12,19 +14,34 @@ def _button(app: AppTest, label: str):
     return next(button for button in app.button if button.label == label)
 
 
+def _element(elements, label: str):
+    return next(element for element in elements if element.label == label)
+
+
+def _visible_text(app: AppTest) -> str:
+    groups = (app.markdown, app.caption, app.info, app.success, app.error)
+    return " ".join(str(item.value) for group in groups for item in group)
+
+
+def _demo_artifact_root() -> Path:
+    return Path(__file__).resolve().parents[1] / "demo" / "artifacts"
+
+
 def _app() -> AppTest:
     app_path = Path(__file__).resolve().parents[1] / "app.py"
     return AppTest.from_file(str(app_path)).run(timeout=20)
 
 
-def test_public_home_and_corporate_login_routes_work(monkeypatch) -> None:
+def test_public_home_and_open_demo_routes_work(monkeypatch) -> None:
     monkeypatch.delenv("ARGUS_DEMO_EMAIL", raising=False)
     monkeypatch.delenv("ARGUS_DEMO_PASSWORD", raising=False)
     app = _app()
 
     assert not app.exception
-    assert _button(app, "Request a Demo")
-    _button(app, "Corporate Login").click()
+    markup = " ".join(str(item.value) for item in app.markdown)
+    assert '<a class="argus-primary-cta" href="#case-challenge">Explore ARGUS</a>' in markup
+    assert _button(app, "Request a Pilot")
+    _button(app, "Open Demo").click()
     app.run(timeout=20)
 
     assert not app.exception
@@ -44,21 +61,137 @@ def test_public_navigation_anchors_have_matching_sections() -> None:
     assert 'id="argus-main-content"' in markup
     assert '<details class="argus-mobile-nav">' in markup
     assert "<summary>Explore</summary>" in markup
-    for anchor in (
+    for section_id in (
         "product",
         "how-it-works",
-        "analyst-experience",
-        "responsible-ai",
+        "case-challenge",
+        "calculator",
         "resources",
-        "contact",
+        "pilot-program",
     ):
-        assert f'href="#{anchor}"' in markup
-        assert f'id="{anchor}"' in markup
+        assert f'href="#{section_id}"' in markup
+        assert f'id="{section_id}"' in markup
 
-    assert "What ARGUS adds" in markup
-    assert "The analyst decides what happens next" in markup
-    assert "ILLUSTRATIVE CASE · A-2048" not in markup
-    assert "Alert volume grows faster" not in markup
+    for copy in (
+        "See beyond the transaction.",
+        "10,000 alerts. Where should your analysts look first?",
+        "Before ARGUS",
+        "With ARGUS",
+        "ILLUSTRATIVE SYNTHETIC SCENARIO",
+        "AML investigation capacity calculator",
+        "ARGUS Talks",
+        "Case Challenges",
+        "AML Insights",
+        "Historical Data Evaluation",
+        "Pilot Results",
+    ):
+        assert copy in markup
+    assert "ARGUS does not" in markup
+    assert "accuse, block, or sanction customers" in markup
+
+
+def test_capacity_calculator_uses_only_workload_inputs_and_clamps_the_gap() -> None:
+    estimate = calculate_investigation_capacity(
+        monthly_alerts=10_000,
+        analyst_count=12,
+        average_case_minutes=30,
+        working_hours_per_analyst=160,
+    )
+
+    assert estimate.monthly_alerts == 10_000
+    assert estimate.review_capacity == 3_840
+    assert estimate.capacity_gap == 6_160
+
+    over_capacity = calculate_investigation_capacity(
+        monthly_alerts=1_000,
+        analyst_count=12,
+        average_case_minutes=30,
+        working_hours_per_analyst=160,
+    )
+    assert over_capacity.capacity_gap == 0
+
+
+@pytest.mark.parametrize(
+    ("monthly_alerts", "analyst_count", "average_case_minutes", "working_hours"),
+    [
+        (1_000, 2, 0, 160),
+        (-1, 2, 30, 160),
+        (1_000, float("inf"), 30, 160),
+    ],
+)
+def test_capacity_calculator_rejects_invalid_inputs(
+    monthly_alerts: float,
+    analyst_count: float,
+    average_case_minutes: float,
+    working_hours: float,
+) -> None:
+    with pytest.raises(ValueError):
+        calculate_investigation_capacity(
+            monthly_alerts,
+            analyst_count,
+            average_case_minutes,
+            working_hours,
+        )
+
+
+def test_capacity_calculator_renders_metrics_disclaimer_and_demo_cta() -> None:
+    app = _app()
+    metrics = {metric.label: metric.value for metric in app.metric}
+
+    assert metrics == {
+        "Monthly Alerts": "10,000",
+        "Estimated Review Capacity": "3,840",
+        "Potential Capacity Gap": "6,160",
+    }
+    visible = _visible_text(app)
+    assert "illustrates investigation workload only" in visible
+    assert "does not estimate ARGUS performance or guaranteed productivity gains" in visible
+
+    _element(app.number_input, "Monthly AML alerts").set_value(1_000)
+    app.run(timeout=20)
+    metrics = {metric.label: metric.value for metric in app.metric}
+    assert metrics["Potential Capacity Gap"] == "0"
+
+    _button(app, "See how prioritization can help").click()
+    app.run(timeout=20)
+    assert [item.label for item in app.text_input] == ["Corporate email", "Password"]
+
+
+def test_case_challenge_reveals_history_network_and_resumes_in_case_investigator(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ARGUS_ARTIFACT_DIR", str(_demo_artifact_root()))
+    monkeypatch.delenv("ARGUS_DEMO_EMAIL", raising=False)
+    monkeypatch.delenv("ARGUS_DEMO_PASSWORD", raising=False)
+    app = _app()
+
+    visible = _visible_text(app)
+    assert "ILLUSTRATIVE SYNTHETIC SCENARIO" in visible
+    assert "ADDITIONAL TRANSACTION HISTORY" not in visible
+    for label in ("YES", "NO", "SHOW MORE CONTEXT"):
+        assert _button(app, label)
+
+    _button(app, "SHOW MORE CONTEXT").click()
+    app.run(timeout=20)
+    assert "ADDITIONAL TRANSACTION HISTORY" in _visible_text(app)
+    assert _button(app, "Reveal account network")
+
+    _button(app, "Reveal account network").click()
+    app.run(timeout=20)
+    visible = _visible_text(app)
+    assert "ACCOUNT NETWORK CONTEXT" in visible
+    assert "Network context can reveal patterns that are difficult to see in isolation" in visible
+    assert "not a finding of wrongdoing" in visible
+
+    _button(app, "Explore the ARGUS case workflow").click()
+    app.run(timeout=20)
+    assert [item.label for item in app.text_input] == ["Corporate email", "Password"]
+    _element(app.text_input, "Corporate email").set_value("analyst@bank.example")
+    _element(app.text_input, "Password").set_value("prototype-access")
+    _button(app, "Sign in").click()
+    app.run(timeout=20)
+    assert not app.exception
+    assert app.title[0].value == "Case Investigator"
 
 
 def test_public_resource_and_legal_routes_render() -> None:
@@ -77,87 +210,94 @@ def test_public_resource_and_legal_routes_render() -> None:
         assert expected_copy in visible
 
 
-def test_demo_request_validation_rejects_missing_and_invalid_values() -> None:
+def test_pilot_request_validation_rejects_missing_and_invalid_values() -> None:
     errors = validate_demo_request(
         {
-            "first_name": "",
-            "last_name": "",
+            "name": "",
             "work_email": "invalid",
             "company": "",
-            "role": "Select your role",
-            "message": "",
+            "role": "",
+            "organization_type": "Select organization type",
+            "main_challenge": "Select main challenge",
+            "optional_message": "",
             "consent": False,
         }
     )
 
     assert set(errors) == {
-        "first_name",
-        "last_name",
+        "name",
         "work_email",
         "company",
         "role",
-        "message",
+        "organization_type",
+        "main_challenge",
         "consent",
     }
 
 
-def test_demo_request_valid_payload_has_no_errors() -> None:
+def test_pilot_request_valid_payload_allows_an_empty_optional_message() -> None:
     assert not validate_demo_request(
         {
-            "first_name": "Gizem",
-            "last_name": "Özcan",
+            "name": "Gizem Özcan",
             "work_email": "gizem@institution.example",
             "company": "Example Institution",
-            "role": "Financial Crime Analyst",
-            "message": "Evaluate the investigation workflow.",
+            "role": "AML Manager",
+            "organization_type": "Bank",
+            "main_challenge": "Alert Prioritization",
+            "optional_message": "",
             "consent": True,
         }
     )
 
 
-def test_demo_request_form_completes_as_session_only_flow() -> None:
+def test_pilot_request_form_completes_as_session_only_flow() -> None:
     app = _app()
-    _button(app, "Request a Demo").click()
+    _button(app, "Request a Pilot").click()
     app.run(timeout=20)
 
-    for field, value in zip(
-        app.text_input,
-        ("Gizem", "Özcan", "gizem@institution.example", "Example Institution"),
-        strict=True,
-    ):
-        field.set_value(value)
-    app.selectbox[0].set_value("Financial Crime / AML")
-    app.text_area[0].set_value("Evaluate the investigation workflow.")
-    app.checkbox[0].check()
-    _button(app, "Request a Demo").click()
+    _element(app.text_input, "Name").set_value("Gizem Özcan")
+    _element(app.text_input, "Company").set_value("Example Institution")
+    _element(app.text_input, "Work Email").set_value("gizem@institution.example")
+    _element(app.text_input, "Role").set_value("AML Manager")
+    _element(app.selectbox, "Organization Type").set_value("Bank")
+    _element(app.selectbox, "Main Challenge").set_value("Alert Prioritization")
+    _element(app.text_area, "Optional Message").set_value("Evaluate the workflow.")
+    _element(
+        app.checkbox,
+        "I understand this demo form validates inputs but does not send or store them.",
+    ).check()
+    _button(app, "Request ARGUS Pilot").click()
     app.run(timeout=20)
 
     assert not app.exception
-    assert any("Thank you, Gizem" in item.value for item in app.success)
-    confirmation = " ".join(str(item.value) for item in app.markdown)
-    assert "Demo environment" in confirmation
-    assert "No external CRM submission is connected" in confirmation
-    assert "No message was sent" in confirmation
+    assert any("Gizem Özcan" in item.value for item in app.success)
+    confirmation = _visible_text(app).casefold()
+    assert "demo" in confirmation
+    assert "not stored" in confirmation
+    assert "or sent" in confirmation
 
 
-def test_demo_request_form_shows_helpful_inline_errors() -> None:
+def test_pilot_request_form_shows_required_errors_but_not_an_optional_message_error() -> None:
     app = _app()
-    _button(app, "Request a Demo").click()
+    _button(app, "Request a Pilot").click()
     app.run(timeout=20)
-    _button(app, "Request a Demo").click()
+    _button(app, "Request ARGUS Pilot").click()
     app.run(timeout=20)
 
     assert not app.exception
     assert any("Please correct" in item.value for item in app.error)
-    visible = " ".join(str(item.value) for item in app.markdown)
-    assert "Enter your first name." in visible
+    visible = _visible_text(app)
+    assert "Enter your name." in visible
     assert "Enter your work email." in visible
-    assert "Confirm that ARGUS may use these details" in visible
+    assert "Select your organization type." in visible
+    assert "Select your main challenge." in visible
+    assert "Confirm that you understand this demo form" in visible
+    assert "optional message" not in visible.casefold()
 
 
 def test_login_uses_enterprise_copy_and_reveals_sso_limit_only_after_click() -> None:
     app = _app()
-    _button(app, "Corporate Login").click()
+    _button(app, "Open Demo").click()
     app.run(timeout=20)
 
     visible = " ".join(str(item.value) for group in (app.markdown, app.caption) for item in group)
@@ -209,7 +349,7 @@ def test_streamlit_product_chrome_uses_supported_minimal_configuration() -> None
     assert config["client"]["showSidebarNavigation"] is False
 
 
-def test_portal_sidebar_keeps_streamlit_collapse_behavior_and_mobile_width() -> None:
+def test_public_and_portal_styles_include_responsive_guards() -> None:
     styles_path = Path(__file__).resolve().parents[1] / "src" / "argus" / "app" / "styles.py"
     styles = styles_path.read_text(encoding="utf-8")
 
@@ -217,3 +357,12 @@ def test_portal_sidebar_keeps_streamlit_collapse_behavior_and_mobile_width() -> 
     assert "max-width: 86vw !important" in styles
     assert "min-width: 0 !important" in styles
     assert ".argus-mobile-nav { display: block; }" in styles
+    responsive_rules = styles[styles.index("@media (max-width: 900px)") :]
+    for selector in (
+        ".argus-alert-flow",
+        ".argus-before-after",
+        ".argus-transaction-ticket",
+        ".argus-marketing-resources",
+        ".argus-pilot-steps",
+    ):
+        assert selector in responsive_rules

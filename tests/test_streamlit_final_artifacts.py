@@ -17,7 +17,7 @@ def _button(app: AppTest, label: str):
 
 
 def _login(app: AppTest) -> AppTest:
-    _button(app, "Corporate Login").click()
+    _button(app, "Open Demo").click()
     app.run(timeout=20)
     app.text_input[0].set_value("analyst@bank.example")
     app.text_input[1].set_value("prototype-access")

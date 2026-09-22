@@ -19,7 +19,7 @@ def _login(app: AppTest) -> AppTest:
     password = secrets.token_urlsafe(16)
     os.environ["ARGUS_DEMO_EMAIL"] = email
     os.environ["ARGUS_DEMO_PASSWORD"] = password
-    _button(app, "Corporate Login").click()
+    _button(app, "Open Demo").click()
     app.run(timeout=30)
     app.text_input[0].set_value(email)
     app.text_input[1].set_value(password)
@@ -49,7 +49,7 @@ def main() -> int:
         "Model Evidence",
     )
     app = AppTest.from_file(str(project_root / "app.py")).run(timeout=30)
-    if app.exception or not any(button.label == "Corporate Login" for button in app.button):
+    if app.exception or not any(button.label == "Open Demo" for button in app.button):
         print("Sprint 4 Streamlit artifact smoke status: FAIL (public site)")
         return 1
     app = _login(app)
@@ -70,7 +70,7 @@ def main() -> int:
 
     _button(app, "Log out").click()
     app.run(timeout=30)
-    if app.exception or not any(button.label == "Corporate Login" for button in app.button):
+    if app.exception or not any(button.label == "Open Demo" for button in app.button):
         print("Sprint 4 Streamlit artifact smoke status: FAIL (logout)")
         return 1
 

@@ -28,6 +28,7 @@ model katkılarıyla birlikte banka finansal suç analistine sunulur.
 - [Veri ve yöntem](#veri)
 - [Final sonuçlar](#final-sonuçlar)
 - [Analist ürünü](#analist-ürünü)
+- [Public B2B deneyimi](#public-b2b-deneyimi)
 - [Mimari](#mimari)
 - [Kurulum ve kalite kontrolleri](#hızlı-başlangıç)
 - [Canlı yayın](#canlı-yayın-ve-yeniden-dağıtım)
@@ -193,6 +194,34 @@ Graph-enhanced LightGBM birincil sıralama modelidir. Uygulamadaki mevcut kayıt
 
 Kurumsal giriş bilgileri ve vaka aksiyonları kalıcı olarak saklanmaz; çıkış yapıldığında demo
 oturumu temizlenir.
+
+## Public B2B deneyimi
+
+Herkese açık deneyim, ziyaretçiyi **Farkındalık → Ürünü anlama → Etkileşimli deneyim →
+ARGUS demosu → Pilot fırsatı** akışında yönlendirir. Açılış sayfası problem ve ürün yaklaşımını,
+`Before ARGUS / With ARGUS` karşılaştırmasını, etkileşimli vaka senaryosunu, kapasite
+hesaplayıcısını, kaynak alanını ve kontrollü pilot programını tek bir yolculukta birleştirir.
+`Open Demo`, mevcut kurumsal demo girişi üzerinden analist portalına gider; iç geliştirme veya
+yönetim işlevleri herkese açık gezinmede yer almaz.
+
+`Would You Investigate This Transaction?` vaka senaryosu bütünüyle sentetik ve açıklayıcıdır.
+Gerçek bir soruşturma, IBM HI-Small kaydı, dondurulmuş model çıktısı veya bilimsel sonuç değildir;
+yanıtlar suç, yaptırım ya da otomatik karar anlamına gelmez.
+
+AML inceleme kapasitesi hesaplayıcısı yalnızca kullanıcının girdiği iş yükünü şu formüllerle
+görselleştirir:
+
+```text
+tahmini aylık inceleme kapasitesi = analist sayısı × analist başına aylık çalışma saati × 60 / vaka başına ortalama dakika
+potansiyel kapasite açığı = max(0, aylık alarm sayısı - tahmini inceleme kapasitesi)
+```
+
+Hesaplayıcı ARGUS performansını, verimlilik artışını veya garanti edilen bir kazanımı tahmin etmez.
+Pilot talep formu alanları yalnızca aktif Streamlit oturumunda doğrular; CRM, e-posta veya kalıcı
+veri tabanı entegrasyonu yoktur, istek gönderilmez ve form verisi proje artifact'larına yazılmaz.
+
+Konumlandırma, hedef kitle, pazarlama hunisi, içerik planı ve claim/provenance sınırları için
+[`docs/marketing/README.md`](docs/marketing/README.md) dosyasına bakın.
 
 ## Mimari
 
